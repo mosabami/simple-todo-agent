@@ -1,0 +1,28 @@
+
+# Azure Identity for authentication
+azure-identity>=1.15.0
+
+# Azure Monitor OpenTelemetry for Foundry tracing
+azure-monitor-opentelemetry>=1.6.0
+opentelemetry-sdk>=1.24.0
+azure-core-tracing-opentelemetry>=1.0.0b11
+
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Pydantic for data validation
+pydantic>=2.5.0
+
+# Chainlit UI
+chainlit>=1.0.0
+
+# Microsoft Agent Framework (--pre flag required while in preview)
+--pre
+agent-framework-azure-ai
