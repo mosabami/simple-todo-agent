@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration from environment
 PROJECT_ENDPOINT = os.getenv("AZURE_AI_PROJECT_ENDPOINT", "")
-MODEL_DEPLOYMENT = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o-mini")
+MODEL_DEPLOYMENT = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5.2-chat")
 MANAGED_IDENTITY_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
 TODO_API_URL = os.getenv("TODO_API_URL", "https://jsonplaceholder.typicode.com/todos")
 

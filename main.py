@@ -148,7 +148,7 @@ async def chat(request: ChatRequest):
         
         return ChatResponse(
             response=response,
-            model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
+            model=os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5.2-chat"),
             framework="agent-framework"
         )
         

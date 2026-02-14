@@ -16,7 +16,7 @@ What you’ll learn:
 - How to run the agent locally with `DefaultAzureCredential`.
 - How to enable OTEL-based tracing with Agent Framework (`configure_otel_providers`) and a connected Application Insights resource.
 - How to connect Application Insights after the first run so traces show up in Foundry.
-- How to deploy the same code to Azure Container Apps with system-assigned identity and the required RBAC.
+- How to deploy the agent as an app in Azure Container Apps with system-assigned identity and the required RBAC.
 
 ## What is Agent Framework?
 
@@ -64,7 +64,7 @@ This repo is intentionally small. The fastest way to understand it is to skim th
 Copy `.env.example` to `.env` and set:
 
 - `AZURE_AI_PROJECT_ENDPOINT`: Foundry project endpoint URL (looks like `https://<resource>.services.ai.azure.com/api/projects/<project>`)
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`: the model *deployment name* you created (example: `gpt-4o-mini`)
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`: the model *deployment name* you created (example: `gpt-5.2-chat`)
 
 Optional:
 
@@ -90,7 +90,7 @@ FOUNDRY_RESOURCE=foundrytodo$RANDOM
 FOUNDRY_PROJECT=todo-agent
 
 # Model deployment name (this must match AZURE_AI_MODEL_DEPLOYMENT_NAME)
-MODEL_DEPLOYMENT_NAME=gpt-4o-mini
+MODEL_DEPLOYMENT_NAME=gpt-5.2-chat
 ```
 
 ### 1) Create the resource group
@@ -147,7 +147,7 @@ az cognitiveservices account deployment create \
 	--name $FOUNDRY_RESOURCE \
 	--resource-group $RG \
 	--deployment-name $MODEL_DEPLOYMENT_NAME \
-	--model-name gpt-4o-mini \
+	--model-name gpt-5.2 \
 	--model-version "2024-07-18" \
 	--model-format OpenAI \
 	--sku-capacity "1" \
@@ -250,7 +250,7 @@ RG=rg-todo-agent
 
 # Foundry project endpoint + deployment name
 AZURE_AI_PROJECT_ENDPOINT="<paste-your-foundry-project-endpoint-here>"
-MODEL_DEPLOYMENT_NAME=gpt-4o-mini
+MODEL_DEPLOYMENT_NAME=gpt-5.2-chat
 
 # Containers
 ACR_NAME=acrtodo$RANDOM
