@@ -7,15 +7,15 @@ The agent:
 
 - Fetches todo items from `https://jsonplaceholder.typicode.com/todos`.
 - Creates/runs an agent in your Foundry project via the project endpoint.
-- Emits traces through Agent Framework’s observability so activity shows up in Foundry.
+- Emits OpenTelemetry traces through Agent Framework’s observability (export requires configuring an exporter/backend).
 
 What you’ll learn:
 
 - How Agent Framework uses a Foundry project endpoint + model deployment to run an agent (even when you execute code locally).
 - How to structure a tiny agent with a single tool and streamed responses.
 - How to run the agent locally with `DefaultAzureCredential`.
-- How to enable OTEL-based tracing with Agent Framework (`configure_otel_providers`) and a connected Application Insights resource.
-- How to connect Application Insights after the first run so traces show up in Foundry.
+- How to enable OTEL-based tracing with Agent Framework and export it to Application Insights (Azure Monitor exporter) or any OTLP backend.
+- How to connect Application Insights after the first run and then provide the connection string so traces show up.
 - How to deploy the agent as an app in Azure Container Apps with system-assigned identity and the required RBAC.
 
 ## What is Agent Framework?
@@ -52,9 +52,9 @@ This repo is intentionally small. The fastest way to understand it is to skim th
 	- Loads env vars (so the same `.env` works locally and in a container).
 
 - `tracing.py`: Observability/tracing bootstrap.
-	- Uses Agent Framework’s observability helper (`configure_otel_providers`) so traces flow to the Application Insights connected to your Foundry project, even when you onboard the agent running elsewhere as a 3P agent in Foundry.
-	- Falls back to manual Azure Monitor OpenTelemetry wiring if you set `APPLICATIONINSIGHTS_CONNECTION_STRING`.
-	- OTEL setup in this repo is “one line”: keep the early `configure_foundry_tracing(...)` call in `agent.py`, set `OTEL_SERVICE_NAME` if you want, and connect App Insights after the first run.
+	- Enables Agent Framework instrumentation and configures exporters.
+	- To export to Application Insights, set `APPLICATIONINSIGHTS_CONNECTION_STRING` (uses `azure-monitor-opentelemetry`).
+	- To export to an OTLP backend (Aspire/Jaeger/etc.), set `OTEL_EXPORTER_OTLP_*` or `ENABLE_CONSOLE_EXPORTERS=true` and use `configure_otel_providers()`.
 
 - `chainlit_app.py`: Optional chat UI.
 	- Starts a Chainlit chat session, keeps a simple in-memory `chat_history`, and streams agent output tokens to the UI.
@@ -71,7 +71,7 @@ Optional:
 - `TODO_API_URL` (defaults to JSONPlaceholder)
 - `PORT` (defaults to `8080`)
 - `OTEL_SERVICE_NAME` (defaults to `todo-agent`)
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` (fallback only; normally not needed when using a Foundry project with connected Application Insights)
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` (required to export traces directly to Application Insights from this app)
 
 ## One-time Azure setup (required before local run)
 
@@ -230,6 +230,8 @@ In the Foundry portal:
 
 After the connection is set, traces from subsequent runs will appear in the agent’s traces/monitoring views.
 
+Important: connecting Application Insights in Foundry does not automatically configure this app to export telemetry. For traces to show up, you must also set `APPLICATIONINSIGHTS_CONNECTION_STRING` in the environment where this code runs (local `.env`, Container Apps app settings, etc.).
+
 
 
 ## Deploy to Azure Container Apps (Azure CLI)
@@ -301,7 +303,7 @@ az containerapp env create \
 
 ### 3) Create Application Insights (optional)
 
-Agent Framework typically routes traces to the Application Insights instance connected to your Foundry project. This resource is created here as a convenient place to look at Container Apps telemetry.
+This resource is created here as a convenient place to look at Container Apps telemetry. To export traces from this app to Application Insights, you must provide `APPLICATIONINSIGHTS_CONNECTION_STRING` (this repo uses the Azure Monitor OpenTelemetry exporter).
 
 ```bash
 az monitor app-insights component create \
@@ -309,6 +311,12 @@ az monitor app-insights component create \
 	--location $LOCATION \
 	--resource-group $RG \
 	--application-type web
+
+# Get the connection string (you'll set it on the Container App)
+APPINSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
+	--app $APPINSIGHTS \
+	--resource-group $RG \
+	--query connectionString -o tsv)
 ```
 
 ### 4) Create the Container App and configure identity + RBAC
@@ -329,6 +337,7 @@ az containerapp create \
 		PORT=8080 \
 		TODO_API_URL=https://jsonplaceholder.typicode.com/todos \
 		OTEL_SERVICE_NAME=todo-agent \
+		APPLICATIONINSIGHTS_CONNECTION_STRING=$APPINSIGHTS_CONNECTION_STRING \
 		AZURE_AI_PROJECT_ENDPOINT=$AZURE_AI_PROJECT_ENDPOINT \
 		AZURE_AI_MODEL_DEPLOYMENT_NAME=$MODEL_DEPLOYMENT_NAME
 ```
@@ -389,5 +398,22 @@ az containerapp show \
 	--resource-group $RG \
 	--query properties.configuration.ingress.fqdn \
 	-o tsv
+```
+
+## Rebuild + redeploy after code changes
+
+When you change code, rebuild the container image and update the Container App to point at the new tag (using a unique tag avoids "latest" caching issues).
+
+```bash
+# Build a new image tag in ACR
+IMAGE_TAG=$(date +%Y%m%d%H%M%S)
+az acr build --registry $ACR_NAME --image ${IMAGE_NAME}:${IMAGE_TAG} .
+
+# Update Container App to the new image (creates a new revision)
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $RG --query loginServer -o tsv)
+az containerapp update \
+	--name $ACA_APP \
+	--resource-group $RG \
+	--image ${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}
 ```
 
