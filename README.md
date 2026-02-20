@@ -416,3 +416,43 @@ az containerapp update \
 	--image ${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${IMAGE_TAG}
 ```
 
+## Register as a 3rd-party agent in Foundry
+
+Once your Container App is deployed, you can register it as a 3rd-party agent in Microsoft Foundry. This lets you view traces, monitor performance, and manage the agent alongside your other Foundry assets.
+
+### 1) Go to the Assets page
+
+In the Foundry portal, navigate to the **Operate** tab and select **Assets**.
+
+![Assets page](pics/add-3p-agent-1.png)
+
+### 2) Register the asset
+
+Click **Register asset** to add your Container App as a 3rd-party agent.
+
+### 3) Configure the agent
+
+Fill in the registration form:
+
+- **URL**: Enter your Container App URL (e.g., `https://todo-agent.<region>.azurecontainerapps.io`)
+- **OpenTelemetry agent ID**: Set to `todo-agent` (must match `OTEL_SERVICE_NAME` env var)
+- **Foundry project**: Select a project that has AI Gateway configured (create one if needed)
+- **Agent name**: Choose a suitable display name (e.g., "Todo Agent")
+
+![Register asset form](pics/add-3p-agent-2.png)
+
+After registration, traces from your Container App will appear in the Asset page, Agent tab. You can click on it to see its traces when you make agent runs using the AI gateway's url for your agent.
+
+### 4) Run the agent via AI Gateway
+
+Once registered, you can invoke your agent through the AI Gateway URL. Example:
+
+```bash
+curl -sS https://<your-gateway>.azure-api.net/todo-agent/chat \
+	-H "content-type: application/json" \
+	-d '{"message":"Show me 3 incomplete todos"}'
+```
+
+Replace `<your-gateway>` with your AI Gateway hostname. The `/todo-agent` path matches the agent name you registered.
+
+
