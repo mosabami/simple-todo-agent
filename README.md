@@ -321,16 +321,14 @@ APPINSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
 
 ### 4) Create the Container App and configure identity + RBAC
 
-Create the Container App:
+Create the Container App with a placeholder image first (ACR auth requires identity which doesn't exist until the app is created):
 
 ```bash
-ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $RG --query loginServer -o tsv)
-
 az containerapp create \
 	--name $ACA_APP \
 	--resource-group $RG \
 	--environment $ACA_ENV \
-	--image ${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest \
+	--image mcr.microsoft.com/k8se/quickstart:latest \
 	--target-port 8080 \
 	--ingress external \
 	--env-vars \
@@ -356,6 +354,7 @@ APP_PRINCIPAL_ID=$(az containerapp identity assign \
 Grant the identity permission to pull from ACR:
 
 ```bash
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $RG --query loginServer -o tsv)
 REGISTRY_ID=$(az acr show --name $ACR_NAME --resource-group $RG --query id -o tsv)
 
 az role assignment create \
@@ -381,13 +380,13 @@ az role assignment create \
 	--role "Azure AI User"
 ```
 
-Update the Container App env var once you have the project endpoint:
+Now update the Container App to use your ACR image:
 
 ```bash
 az containerapp update \
 	--name $ACA_APP \
 	--resource-group $RG \
-	--set-env-vars AZURE_AI_PROJECT_ENDPOINT=$AZURE_AI_PROJECT_ENDPOINT
+	--image ${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest
 ```
 
 Get the app URL:
