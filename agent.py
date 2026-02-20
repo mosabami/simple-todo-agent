@@ -12,17 +12,13 @@ import httpx
 from typing import Annotated, Optional, AsyncGenerator
 from dotenv import load_dotenv
 
-from agent_framework import tool
-from agent_framework.azure import AzureAIProjectAgentProvider
+from agent_framework import Agent, tool
+from agent_framework.azure import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 from pydantic import Field
 
-# Load environment variables first so tracing can use them
+# Load environment variables first
 load_dotenv()
-
-# Import and configure Foundry tracing (MUST be done early, before other Azure calls)
-from tracing import configure_foundry_tracing
-configure_foundry_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "todo-agent"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,10 +30,11 @@ MODEL_DEPLOYMENT = os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-5.2-chat")
 MANAGED_IDENTITY_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
 TODO_API_URL = os.getenv("TODO_API_URL", "https://jsonplaceholder.typicode.com/todos")
 
-# Singleton for Azure AI provider reuse
+# Singleton for Azure AI client reuse
 _credential: Optional[DefaultAzureCredential] = None
-_provider: Optional[AzureAIProjectAgentProvider] = None
-_provider_initialized = False
+_client: Optional[AzureAIClient] = None
+_client_initialized = False
+_tracing_configured = False
 
 # Cache for todos data
 _todos_cache: Optional[list] = None
@@ -119,12 +116,15 @@ async def get_todo_by_id_tool(
         return f"Error fetching todo {todo_id}: {str(e)}"
 
 
-async def get_agent_provider() -> AzureAIProjectAgentProvider:
-    """Get or create a singleton AzureAIProjectAgentProvider for connection reuse."""
-    global _credential, _provider, _provider_initialized
+async def get_azure_ai_client() -> AzureAIClient:
+    """
+    Get or create a singleton AzureAIClient for connection reuse.
+    Also configures Azure Monitor tracing (auto-fetches App Insights from Foundry project).
+    """
+    global _credential, _client, _client_initialized, _tracing_configured
     
-    if _provider_initialized and _provider is not None:
-        return _provider
+    if _client_initialized and _client is not None:
+        return _client
     
     # Use managed_identity_client_id for user-assigned managed identity
     if MANAGED_IDENTITY_CLIENT_ID:
@@ -133,18 +133,48 @@ async def get_agent_provider() -> AzureAIProjectAgentProvider:
         )
     else:
         _credential = DefaultAzureCredential()
-    await _credential.__aenter__()
     
-    _provider = AzureAIProjectAgentProvider(
-        credential=_credential,
+    # Create AzureAIClient (it creates AIProjectClient internally)
+    _client = AzureAIClient(
         project_endpoint=PROJECT_ENDPOINT,
-        model=MODEL_DEPLOYMENT,
+        credential=_credential,
     )
-    await _provider.__aenter__()
-    _provider_initialized = True
-    logger.info("Created singleton AzureAIProjectAgentProvider")
+    await _client.__aenter__()
+    _client_initialized = True
+    logger.info("Created singleton AzureAIClient")
     
-    return _provider
+    # Configure Azure Monitor tracing (fetches App Insights connection string from project)
+    if not _tracing_configured:
+        await _configure_tracing()
+    
+    return _client
+
+
+async def _configure_tracing() -> None:
+    """Configure Azure Monitor tracing with fallback to manual configuration."""
+    global _tracing_configured
+    
+    # Option 1: Try AzureAIClient.configure_azure_monitor() - auto-fetches from Foundry project
+    try:
+        await _client.configure_azure_monitor(enable_live_metrics=True)
+        _tracing_configured = True
+        logger.info(
+            "Azure Monitor tracing configured via AzureAIClient. "
+            "Traces will be exported to your project's Application Insights."
+        )
+        return
+    except Exception as e:
+        logger.warning(
+            f"Failed to configure Azure Monitor via AzureAIClient: {e}. "
+            "Falling back to manual configuration."
+        )
+    
+    # Option 2: Fallback to manual APPLICATIONINSIGHTS_CONNECTION_STRING
+    from tracing import configure_foundry_tracing
+    if configure_foundry_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "todo-agent")):
+        _tracing_configured = True
+    else:
+        logger.warning("Tracing not configured. Traces will not be exported.")
 
 
 # System prompt for the agent
@@ -191,17 +221,19 @@ async def run_todo_agent(
         chat_history = []
     
     try:
-        provider = await get_agent_provider()
+        client = await get_azure_ai_client()
         
         # Fetch todos directly from API
         todos = await fetch_todos()
         todos_context = format_todos_for_context(todos)
         
         # Create agent with get_todo_by_id tool and todos context
-        agent = await provider.create_agent(
+        agent = Agent(
+            client=client,
             name="TodoAgent",
             instructions=SYSTEM_PROMPT + f"\n\n--- TODO DATA ---\n{todos_context}",
             tools=[get_todo_by_id_tool],
+            model=MODEL_DEPLOYMENT,
         )
         
         logger.info(f"Todo Agent created with {len(todos)} todos as context")

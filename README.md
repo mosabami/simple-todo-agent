@@ -20,7 +20,7 @@ What you’ll learn:
 
 ## What is Agent Framework?
 
-Microsoft Agent Framework is an SDK that helps you build agents that run against a model deployment in Microsoft Foundry. In this repo, the agent is created through `AzureAIProjectAgentProvider`, which connects to your Foundry **project endpoint** and uses your chosen **model deployment**.
+Microsoft Agent Framework is an SDK that helps you build agents that run against a model deployment in Microsoft Foundry. In this repo, the agent is created using `AzureAIClient` and `Agent`, which connect to your Foundry **project endpoint** and use your chosen **model deployment**.
 
 Even if you run this code locally on your laptop, the agent is still created and executed in the context of your Foundry project (because the SDK is calling the Foundry project endpoint). That’s why you can see agent activity and traces in Foundry while developing locally.
 
@@ -40,21 +40,21 @@ Authentication:
 This repo is intentionally small. The fastest way to understand it is to skim these files:
 
 - `agent.py`: Core agent logic.
-	- Loads env vars and configures tracing early.
+	- Creates a singleton `AzureAIClient` with `DefaultAzureCredential` for connection reuse.
+	- Configures Azure Monitor tracing via `AzureAIClient.configure_azure_monitor()` (auto-fetches App Insights connection string from your Foundry project).
 	- Fetches todos from `TODO_API_URL` and formats a subset into prompt context.
 	- Defines one tool (`get_todo_by_id_tool`) the model can call to fetch a specific todo by ID.
-	- Uses `AzureAIProjectAgentProvider` with `DefaultAzureCredential` to create and run an agent in your Foundry project (`AZURE_AI_PROJECT_ENDPOINT`) against a deployed model (`AZURE_AI_MODEL_DEPLOYMENT_NAME`).
-	- Streams responses back to the caller.
+	- Creates an `Agent` with tools and streams responses back to the caller.
 
 - `main.py`: HTTP API wrapper for the agent.
 	- Exposes `/health` and `/chat` endpoints using FastAPI so the agent can be run as a simple web service.
 	- Supports streaming responses via `/chat/stream` (Server-Sent Events).
 	- Loads env vars (so the same `.env` works locally and in a container).
 
-- `tracing.py`: Observability/tracing bootstrap.
-	- Enables Agent Framework instrumentation and configures exporters.
-	- To export to Application Insights, set `APPLICATIONINSIGHTS_CONNECTION_STRING` (uses `azure-monitor-opentelemetry`).
-	- To export to an OTLP backend (Aspire/Jaeger/etc.), set `OTEL_EXPORTER_OTLP_*` or `ENABLE_CONSOLE_EXPORTERS=true` and use `configure_otel_providers()`.
+- `tracing.py`: Fallback tracing configuration.
+	- Only used if `AzureAIClient.configure_azure_monitor()` fails.
+	- Falls back to manual `APPLICATIONINSIGHTS_CONNECTION_STRING` env var.
+	- Provides `get_tracer()` helper for custom span creation.
 
 - `chainlit_app.py`: Optional chat UI.
 	- Starts a Chainlit chat session, keeps a simple in-memory `chat_history`, and streams agent output tokens to the UI.
@@ -71,7 +71,7 @@ Optional:
 - `TODO_API_URL` (defaults to JSONPlaceholder)
 - `PORT` (defaults to `8080`)
 - `OTEL_SERVICE_NAME` (defaults to `todo-agent`)
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` (required to export traces directly to Application Insights from this app)
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional fallback - tracing is auto-configured from your Foundry project's connected App Insights)
 
 ## One-time Azure setup (required before local run)
 
