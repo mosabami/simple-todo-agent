@@ -230,7 +230,7 @@ In the Foundry portal:
 
 After the connection is set, traces from subsequent runs will appear in the agent’s traces/monitoring views.
 
-Important: connecting Application Insights in Foundry does not automatically configure this app to export telemetry. For traces to show up, you must also set `APPLICATIONINSIGHTS_CONNECTION_STRING` in the environment where this code runs (local `.env`, Container Apps app settings, etc.).
+Note: This app uses `AzureAIClient.configure_azure_monitor()` which automatically fetches the Application Insights connection string from your Foundry project. You do **not** need to manually set `APPLICATIONINSIGHTS_CONNECTION_STRING` unless auto-configuration fails (see `tracing.py` for the fallback logic).
 
 
 
@@ -303,7 +303,7 @@ az containerapp env create \
 
 ### 3) Create Application Insights (optional)
 
-This resource is created here as a convenient place to look at Container Apps telemetry. To export traces from this app to Application Insights, you must provide `APPLICATIONINSIGHTS_CONNECTION_STRING` (this repo uses the Azure Monitor OpenTelemetry exporter).
+This resource is created here as a convenient place to look at Container Apps telemetry. Once connected to your Foundry project, `AzureAIClient.configure_azure_monitor()` will automatically fetch the connection string. The `APPLICATIONINSIGHTS_CONNECTION_STRING` env var below is only needed as a fallback if auto-configuration fails.
 
 ```bash
 az monitor app-insights component create \
@@ -392,14 +392,23 @@ az containerapp update \
 Get the app URL:
 
 ```bash
-az containerapp show \
+APP_URL=$(az containerapp show \
 	--name $ACA_APP \
 	--resource-group $RG \
 	--query properties.configuration.ingress.fqdn \
-	-o tsv
+	-o tsv)
+
+echo $APP_URL
 ```
 
-## Rebuild + redeploy after code changes
+Test the app running in ACA
+```bash
+curl -s https://${APP_URL}/chat \
+	-H "content-type: application/json" \
+	-d '{"message":"Show me 3 incomplete todos"}'
+```
+
+## Rebuild + redeploy after code changes (OPTIONAL)
 
 When you change code, rebuild the container image and update the Container App to point at the new tag (using a unique tag avoids "latest" caching issues).
 
@@ -436,7 +445,7 @@ Fill in the registration form:
 
 - **URL**: Enter your Container App URL (e.g., `https://todo-agent.<region>.azurecontainerapps.io`)
 - **OpenTelemetry agent ID**: Set to `todo-agent` (must match `OTEL_SERVICE_NAME` env var)
-- **Foundry project**: Select a project that has AI Gateway configured (create one if needed)
+- **Foundry project**: Select your AI project. You would need to create an AI gateway for it first. 
 - **Agent name**: Choose a suitable display name (e.g., "Todo Agent")
 
 ![Register asset form](pics/add-3p-agent-2.png)
