@@ -83,14 +83,14 @@ You can create and connect Application Insights later (after your first run) so 
 
 ```bash
 LOCATION=eastus
-RG=rg-todo-agent
+RG=rg-to-do-agent
 
 # Foundry
 FOUNDRY_RESOURCE=foundrytodo$RANDOM
 FOUNDRY_PROJECT=todo-agent
 
 # Model deployment name (this must match AZURE_AI_MODEL_DEPLOYMENT_NAME)
-MODEL_DEPLOYMENT_NAME=gpt-5.2-chat
+MODEL_DEPLOYMENT_NAME=gpt-5.1
 ```
 
 ### 1) Create the resource group
@@ -147,8 +147,8 @@ az cognitiveservices account deployment create \
 	--name $FOUNDRY_RESOURCE \
 	--resource-group $RG \
 	--deployment-name $MODEL_DEPLOYMENT_NAME \
-	--model-name gpt-5.2 \
-	--model-version "2024-07-18" \
+	--model-name gpt-5.1 \
+	--model-version "2025-11-13" \
 	--model-format OpenAI \
 	--sku-capacity "1" \
 	--sku-name "Standard"
@@ -183,15 +183,15 @@ az login
 ### 4) Start the API
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8080
+uvicorn main:app --host 0.0.0.0 --port 5000
 ```
 
 Try it:
 
 ```bash
-curl -s http://localhost:8080/health
+curl -s http://localhost:5000/health
 
-curl -s http://localhost:8080/chat \
+curl -s http://localhost:5000/chat \
 	-H "content-type: application/json" \
 	-d '{"message":"Show me 3 incomplete todos"}'
 ```
@@ -230,7 +230,7 @@ In the Foundry portal:
 
 After the connection is set, traces from subsequent runs will appear in the agent’s traces/monitoring views.
 
-Important: connecting Application Insights in Foundry does not automatically configure this app to export telemetry. For traces to show up, you must also set `APPLICATIONINSIGHTS_CONNECTION_STRING` in the environment where this code runs (local `.env`, Container Apps app settings, etc.).
+Note: This app uses `AzureAIClient.configure_azure_monitor()` which automatically fetches the Application Insights connection string from your Foundry project. You do **not** need to manually set `APPLICATIONINSIGHTS_CONNECTION_STRING` unless auto-configuration fails (see `tracing.py` for the fallback logic).
 
 
 
@@ -252,7 +252,7 @@ RG=rg-todo-agent
 
 # Foundry project endpoint + deployment name
 AZURE_AI_PROJECT_ENDPOINT="<paste-your-foundry-project-endpoint-here>"
-MODEL_DEPLOYMENT_NAME=gpt-5.2-chat
+MODEL_DEPLOYMENT_NAME=gpt-5.1
 
 # Containers
 ACR_NAME=acrtodo$RANDOM
@@ -303,7 +303,7 @@ az containerapp env create \
 
 ### 3) Create Application Insights (optional)
 
-This resource is created here as a convenient place to look at Container Apps telemetry. To export traces from this app to Application Insights, you must provide `APPLICATIONINSIGHTS_CONNECTION_STRING` (this repo uses the Azure Monitor OpenTelemetry exporter).
+This resource is created here as a convenient place to look at Container Apps telemetry. Once connected to your Foundry project, `AzureAIClient.configure_azure_monitor()` will automatically fetch the connection string. The `APPLICATIONINSIGHTS_CONNECTION_STRING` env var below is only needed as a fallback if auto-configuration fails.
 
 ```bash
 az monitor app-insights component create \
@@ -335,7 +335,7 @@ az containerapp create \
 		PORT=8080 \
 		TODO_API_URL=https://jsonplaceholder.typicode.com/todos \
 		OTEL_SERVICE_NAME=todo-agent \
-		APPLICATIONINSIGHTS_CONNECTION_STRING=$APPINSIGHTS_CONNECTION_STRING \
+		# APPLICATIONINSIGHTS_CONNECTION_STRING=$APPINSIGHTS_CONNECTION_STRING \
 		AZURE_AI_PROJECT_ENDPOINT=$AZURE_AI_PROJECT_ENDPOINT \
 		AZURE_AI_MODEL_DEPLOYMENT_NAME=$MODEL_DEPLOYMENT_NAME
 ```
@@ -392,14 +392,23 @@ az containerapp update \
 Get the app URL:
 
 ```bash
-az containerapp show \
+APP_URL=$(az containerapp show \
 	--name $ACA_APP \
 	--resource-group $RG \
 	--query properties.configuration.ingress.fqdn \
-	-o tsv
+	-o tsv)
+
+echo $APP_URL
 ```
 
-## Rebuild + redeploy after code changes
+Test the app running in ACA
+```bash
+curl -s https://${APP_URL}/chat \
+	-H "content-type: application/json" \
+	-d '{"message":"Show me 3 incomplete todos"}'
+```
+
+## Rebuild + redeploy after code changes (OPTIONAL)
 
 When you change code, rebuild the container image and update the Container App to point at the new tag (using a unique tag avoids "latest" caching issues).
 
@@ -426,7 +435,7 @@ In the Foundry portal, navigate to the **Operate** tab and select **Assets**.
 
 ![Assets page](pics/add-3p-agent-1.png)
 
-### 2) Register the asset
+### 2) Register the Agent
 
 Click **Register asset** to add your Container App as a 3rd-party agent.
 
@@ -436,7 +445,7 @@ Fill in the registration form:
 
 - **URL**: Enter your Container App URL (e.g., `https://todo-agent.<region>.azurecontainerapps.io`)
 - **OpenTelemetry agent ID**: Set to `todo-agent` (must match `OTEL_SERVICE_NAME` env var)
-- **Foundry project**: Select a project that has AI Gateway configured (create one if needed)
+- **Foundry project**: Select your AI project. **You would need to create an AI gateway for it first**. You can do so by going to Admin Tab in Operate, clicking on AI Gateway tab and clicking on Add Gateway button.
 - **Agent name**: Choose a suitable display name (e.g., "Todo Agent")
 
 ![Register asset form](pics/add-3p-agent-2.png)
