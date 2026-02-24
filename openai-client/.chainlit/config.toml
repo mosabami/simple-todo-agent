@@ -1,0 +1,17 @@
+[project]
+name = "Todo Agent"
+enable_telemetry = false
+
+[features]
+prompt_playground = false
+multi_modal = false
+
+[UI]
+name = "Todo Agent"
+description = "AI Agent for managing todo items"
+default_theme = "dark"
+hide_cot = false
+show_readme_as_default = false
+
+[meta]
+generated_by = "1.0.0"

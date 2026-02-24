@@ -1,0 +1,32 @@
+
+# Azure Monitor OpenTelemetry for tracing (REQUIRED - no Foundry project to auto-configure)
+azure-monitor-opentelemetry>=1.6.0
+azure-monitor-opentelemetry-exporter>=1.0.0b21
+opentelemetry-sdk>=1.24.0
+opentelemetry-semantic-conventions>=0.60b0
+opentelemetry-semantic-conventions-ai==0.4.13
+
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Pydantic for data validation
+pydantic>=2.5.0
+
+# Chainlit UI
+chainlit>=1.0.0
+
+# Microsoft Agent Framework (release candidate)
+agent-framework-azure-ai>=1.0.0rc1
+
+# Azure Identity for managed identity authentication
+azure-identity>=1.15.0
+
+# OpenAI SDK (used by OpenAIClient)
+openai>=1.0.0
